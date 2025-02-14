@@ -206,7 +206,7 @@ x3d_model.to(device)
 x3d_model.eval()
 
 video_path = 0
-cap = cv2.VideoCapture('example1.mp4')
+cap = cv2.VideoCapture('example.mp4')
 
 track_frame_queues = defaultdict(lambda: deque(maxlen=16))
 
