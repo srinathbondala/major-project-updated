@@ -35,21 +35,22 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # --- Load YOLO Model with no_grad ---
 print("Loading YOLOv8 model...")
 with torch.no_grad():
-    yolo_model = YOLO("yolov8n.pt")  # Auto-downloads weights if needed.
+    yolo_model = YOLO("yolov8m.pt")  # Auto-downloads weights if needed.
 yolo_model.to(device)
 
 # --- Initialize Deep SORT ---
-deep_sort = DeepSort(max_age=15)
+deep_sort = DeepSort(max_age=16)
 
 # --- Load the X3D-M Action Recognition Model & Script It for Speed ---
 MODEL_PATH = "x3d_m.pth"
 
 def load_and_script_x3d():
     model = torch.hub.load('facebookresearch/pytorchvideo', 'x3d_m', pretrained=True)
-    # Save state dict if needed (optional)
+    model.to(device)  # Move model to GPU
+    # Save state dict (optional)
     torch.save(model.state_dict(), MODEL_PATH)
     model.eval()
-    # Script the model for faster inference
+    # Script the model for faster inference using an input tensor on the correct device
     scripted_model = torch.jit.trace(model, torch.randn(1, 3, 16, 224, 224).to(device))
     return scripted_model
 
@@ -57,6 +58,7 @@ if os.path.exists(MODEL_PATH):
     print("Loading existing X3D-M model...")
     x3d_model = torch.hub.load('facebookresearch/pytorchvideo', 'x3d_m', pretrained=False)
     x3d_model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
+    x3d_model.to(device)  # Ensure the model is on the same device as the input
     x3d_model.eval()
     x3d_model = torch.jit.trace(x3d_model, torch.randn(1, 3, 16, 224, 224).to(device))
 else:
@@ -64,7 +66,7 @@ else:
     x3d_model = load_and_script_x3d()
 x3d_model.to(device)
 
-# Optionally, if your device supports fp16, you can convert the model:
+# Optionally, if your device supports fp16, convert the model:
 # x3d_model.half()
 
 # --- Open Video File ---
@@ -92,9 +94,9 @@ def transform_crop(crop):
     rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB) / 255.0
     # Convert to tensor and rearrange dimensions to (C, H, W)
     tensor = torch.from_numpy(rgb).permute(2, 0, 1).float()
-    # Normalize (using ImageNet mean and std)
-    mean = torch.tensor([0.485, 0.456, 0.406]).view(3,1,1)
-    std = torch.tensor([0.229, 0.224, 0.225]).view(3,1,1)
+    # Normalize using ImageNet mean and std
+    mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
+    std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
     tensor = (tensor - mean) / std
     return tensor
 
@@ -113,7 +115,7 @@ with torch.no_grad():
         for result in results:
             for box in result.boxes.data.tolist():
                 x1, y1, x2, y2, score, class_id = box
-                # Person class in COCO is 0 and using a threshold of 0.3
+                # Person class in COCO is 0; use a threshold of 0.3
                 if int(class_id) == 0 and score > 0.3:
                     detections.append(([x1, y1, x2, y2], score, None))
 

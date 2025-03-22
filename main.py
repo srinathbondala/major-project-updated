@@ -266,7 +266,7 @@ while cap.isOpened():
 
     plt.imshow(rgb_frame)
     plt.axis("off")
-    plt.pause(0.001)
+    st.pyplot(plt.gcf()) 
     plt.clf()
 
 cap.release()
